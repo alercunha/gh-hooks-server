@@ -7,12 +7,15 @@ setup(
     author='Alexandre Cunha',
     author_email='alexandre.cunha@gmail.com',
     license='MIT',
+    packages=[
+        'autopull',
+    ],
     install_requires=[
         'tornado>=4.3',
     ],
     entry_points={
         'console_scripts': [
-            'auto-pull-webhooks = server:main',
+            'auto-pull-webhooks = autopull.server:main',
         ]
     },
     classifiers=[
