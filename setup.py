@@ -12,7 +12,7 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'autopull-webhook = server:main',
+            'auto-pull-webhooks = server:main',
         ]
     },
     classifiers=[
