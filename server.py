@@ -67,7 +67,7 @@ def run(args):
     ioloop.IOLoop.instance().start()
 
 
-if __name__ == '__main__':
+def main():
     logging.basicConfig(level=logging.DEBUG)
     logging.getLogger('tornado.access').setLevel(logging.WARN)
 
@@ -91,3 +91,6 @@ if __name__ == '__main__':
         logging.error(e)
         exit(1)
 
+
+if __name__ == '__main__':
+    main()
