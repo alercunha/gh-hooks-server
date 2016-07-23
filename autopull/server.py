@@ -10,7 +10,7 @@ from tornado import web, ioloop
 from tornado.web import HTTPError
 
 
-def create_handler(project_map: dict, secret: str=None):
+def create_handler(mappings: list, secret: str=None):
     logging.info('Validate X-Hub-Signature: {0}'.format(secret is not None))
 
     class AutoPullHandler(web.RequestHandler):
@@ -22,14 +22,19 @@ def create_handler(project_map: dict, secret: str=None):
                     logging.debug('{0} <> {1}'.format(sig, digest))
                     raise HTTPError(401, 'Wrong signature')
 
-            if key not in project_map:
-                raise HTTPError(404, 'Project {0} not found'.format(key))
-            logging.info('Updating {0}: {1}'.format(key, project_map[key]))
-            output = subprocess.check_output(['git', 'pull'], cwd=project_map[key], stderr=subprocess.STDOUT).decode().strip()
-            logging.info('Output: {0}'.format(output))
+            targets = [i[1] for i in mappings if i[0] == key]
+            if len(targets) == 0:
+                raise HTTPError(404, 'No mapping found for key: {0}'.format(key))
+            all = ''
+            for target in targets:
+                if not os.path.isdir(target):
+                    raise NotADirectoryError('Path {0} not found'.format(target))
+                logging.info('Updating {0}: {1}'.format(key, target))
+                output = subprocess.check_output(['git', 'pull'], cwd=target, stderr=subprocess.STDOUT).decode().strip()
+                logging.info('Output: {0}'.format(output))
+                all += output + os.linesep
             self.set_header('Content-Type', 'application/json')
-            self.write(json.dumps({'output': output}))
-            self.write(os.linesep)
+            self.write(json.dumps({'output': all}))
 
         def write_error(self, status_code, **kwargs):
             msg = ''
@@ -45,21 +50,11 @@ def create_handler(project_map: dict, secret: str=None):
     return AutoPullHandler
 
 
-def parse_projects(projects: list):
-    map = {}
-    for project in projects:
-        split = project.split('=')
-        if not os.path.isdir(split[1]):
-            raise NotADirectoryError('Path {0} not found'.format(split[1]))
-        logging.info('Mapped {0} to {1}'.format(split[0], split[1]))
-        map[split[0]] = split[1]
-    return map
-
-
 def run(args):
-    project_map = parse_projects(args.projects)
+    mappings = [i.split('=') for i in args.projects]
+    logging.info('Mappings: {0}'.format(mappings))
     handlers = [
-        ('/autopull/(\w+)/?', create_handler(project_map, args.secret)),
+        ('/autopull/(\w+)/?', create_handler(mappings, args.secret)),
     ]
     app = web.Application(handlers)
     logging.info('Listening on port {0}...'.format(args.port))
