@@ -13,24 +13,21 @@ from tornado.web import HTTPError
 def create_handler(mappings: list, secret: str=None):
     logging.info('Validate X-Hub-Signature: {0}'.format(secret is not None))
 
-    class AutoPullHandler(web.RequestHandler):
+    class WebhookHandler(web.RequestHandler):
         def post(self, key):
             if secret:
-                digest = hmac.new(secret.encode(), self.request.body, hashlib.sha1).hexdigest()
-                sig = self.request.headers.get('X-Hub-Signature', 'sha1=')[5:]
-                if not hmac.compare_digest(sig, digest):
-                    logging.debug('{0} <> {1}'.format(sig, digest))
-                    raise HTTPError(401, 'Wrong signature')
+                self.validate_signature()
 
             targets = [i[1] for i in mappings if i[0] == key]
             if len(targets) == 0:
                 raise HTTPError(404, 'No mapping found for key: {0}'.format(key))
             all = ''
             for target in targets:
-                if not os.path.isdir(target):
-                    raise NotADirectoryError('Path {0} not found'.format(target))
-                logging.info('Updating {0}: {1}'.format(key, target))
-                output = subprocess.check_output(['git', 'pull'], cwd=target, stderr=subprocess.STDOUT).decode().strip()
+                if not os.path.isfile(target):
+                    raise FileNotFoundError('File {0} not found'.format(target))
+                cwd = os.path.dirname(target)
+                logging.info('Executing mapping {0}: {1}'.format(key, target))
+                output = subprocess.check_output(['bash', target], cwd=cwd, stderr=subprocess.STDOUT).decode().strip()
                 logging.info('Output: {0}'.format(output))
                 all += output + os.linesep
             self.set_header('Content-Type', 'application/json')
@@ -47,14 +44,21 @@ def create_handler(mappings: list, secret: str=None):
                 super().write_error(status_code, **kwargs)
             logging.warning('status: {0} - {1}'.format(status_code, msg))
 
-    return AutoPullHandler
+        def validate_signature(self):
+            digest = hmac.new(secret.encode(), self.request.body, hashlib.sha1).hexdigest()
+            sig = self.request.headers.get('X-Hub-Signature', 'sha1=')[5:]
+            if not hmac.compare_digest(sig, digest):
+                logging.debug('{0} <> {1}'.format(sig, digest))
+                raise HTTPError(401, 'Wrong signature')
+
+    return WebhookHandler
 
 
 def run(args):
-    mappings = [i.split('=') for i in args.projects]
-    logging.info('Mappings: {0}'.format(mappings))
+    mappings = [i.split(':') for i in args.mappings]
+    logging.info('Mappings: {0}'.format(args.mappings))
     handlers = [
-        ('/autopull/(\w+)/?', create_handler(mappings, args.secret)),
+        ('/ghhooks/(\w+)/?', create_handler(mappings, args.secret)),
     ]
     app = web.Application(handlers)
     logging.info('Listening on port {0}...'.format(args.port))
@@ -71,13 +75,13 @@ def main():
     parser.add_argument(
         '-a',
         action='append',
-        dest='projects',
+        dest='mappings',
         default=[],
-        help='Add a project path to be monitored (format key=path)'
+        help='Add a new path mapping from a url path to a bash script (format key:path)'
     )
     parser.add_argument('--secret', help='A secret that validates X-Hub-Signature')
     args = parser.parse_args()
-    if len(args.projects) == 0:
+    if len(args.mappings) == 0:
         parser.print_help()
         exit(1)
     try:

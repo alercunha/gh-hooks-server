@@ -1,21 +1,21 @@
 from setuptools import setup
 
 setup(
-    name='auto-pull-webhooks',
-    version='1.0.0',
-    description='Auto pull webhook for GitHub',
+    name='gh-hooks-server',
+    version='1.1.0',
+    description='GitHub Webhook Server',
     author='Alexandre Cunha',
     author_email='alexandre.cunha@gmail.com',
     license='MIT',
     packages=[
-        'autopull',
+        'ghhooks',
     ],
     install_requires=[
         'tornado>=4.3',
     ],
     entry_points={
         'console_scripts': [
-            'auto-pull-webhooks = autopull.server:main',
+            'ghhooks = ghhooks.server:main',
         ]
     },
     classifiers=[
@@ -24,5 +24,5 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],
-    url='https://github.com/alercunha/auto-pull-webhooks',
+    url='https://github.com/alercunha/gh-hooks-server',
 )
