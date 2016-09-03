@@ -14,6 +14,10 @@ def create_handler(mappings: list, secret: str=None):
     logging.info('Validate X-Hub-Signature: {0}'.format(secret is not None))
 
     class WebhookHandler(web.RequestHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.processes = []
+
         def post(self, key):
             if secret:
                 self.validate_signature()
@@ -21,17 +25,24 @@ def create_handler(mappings: list, secret: str=None):
             targets = [i[1] for i in mappings if i[0] == key]
             if len(targets) == 0:
                 raise HTTPError(404, 'No mapping found for key: {0}'.format(key))
-            all = ''
             for target in targets:
                 if not os.path.isfile(target):
                     raise FileNotFoundError('File {0} not found'.format(target))
                 cwd = os.path.dirname(target)
                 logging.info('Executing mapping {0}: {1}'.format(key, target))
-                output = subprocess.check_output(['bash', target], cwd=cwd, stderr=subprocess.STDOUT).decode().strip()
-                logging.info('Output: {0}'.format(output))
-                all += output + os.linesep
+                p = subprocess.Popen(['bash', target], cwd=cwd, stderr=subprocess.STDOUT, stdout=subprocess.PIPE)
+                self.processes.append(p)
             self.set_header('Content-Type', 'application/json')
-            self.write(json.dumps({'output': all}))
+            self.write(json.dumps({'success': True}))
+            self.write(os.linesep)
+            self.finish()
+
+        def on_finish(self):
+            for p in self.processes:
+                logging.info('=== process output ===')
+                out, err = p.communicate()
+                logging.info('{0}{1}'.format(os.linesep, (out or b'None').decode().strip()))
+                logging.info('=== done ===')
 
         def write_error(self, status_code, **kwargs):
             msg = ''
